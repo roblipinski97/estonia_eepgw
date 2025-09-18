@@ -46,6 +46,7 @@ pacman::p_load(tidyverse, haven, stringr,
                tableone, zoo, rlang, stringfish, microbenchmark,
                gender, genero, tm, stringdist, fuzzyjoin, beepr,
                collapse, pryr, fst, tools, sf,
+               ivreg, estimatr, parsnip, lmtest,
                update = F)
 
 
@@ -456,6 +457,42 @@ mapa2 <- function(x, fill_column, id_column = NA){
   
   
 }
+
+
+
+### barplot theme   ------------------------------------------------------------------------------------------
+bar_theme =  theme_bw() +
+  theme(
+    plot.title = element_markdown(color = 'black', size = 33, hjust = 0.5),
+    plot.subtitle = element_markdown(color = 'grey15', size = 32, hjust = 0.5),
+    plot.caption= element_textbox_simple(face = 'plain', color = 'grey30', size = 19, hjust = 0),
+    
+    
+    axis.title.x =element_text(face = 'bold', color = 'black', size = 34),
+    axis.title.y = element_text(face = 'bold', color = 'black', size = 27),
+    axis.text.y  = element_text(face = 'plain', color = 'black', size = 23),
+    axis.text.x  = element_text(face = 'plain', color = 'black', size = 24),
+    axis.line = element_line(),
+    axis.ticks = element_line(),
+    
+    legend.direction = 'horizontal',
+    legend.position = 'top',
+    legend.title = element_text(size = 34, hjust = 0.5),
+    legend.text = element_text(size = 30, hjust = 0),
+    legend.margin   = margin(10,2,2,2),
+    legend.key.spacing.x = unit(3, 'cm'),
+    
+    plot.background = element_rect(fill = 'white', color = 'NA'),
+    panel.background = element_rect(fill = 'white', color = 'NA'),
+    panel.border = element_blank(),
+    panel.grid.major = element_blank(), #remove major gridlines
+    panel.grid.minor = element_blank(), #remove minor gridlines
+    
+    strip.background = element_rect(fill = 'white', color = 'NA'),
+    strip.text = element_text(color = 'black', size = 10, face = 'bold')
+  )
+
+
 
 #
 # FIN DEL CÓDIGO --------------------------------------------------------------------------------------------------------

@@ -50,7 +50,10 @@ estonia = estonia_save %>%
          across(where(is.character), ~tolower(.)), # all to lowercase
          
          ## empty string + DK + prefer not to say + not alive at the time -> ALL to NAs
-         across(everything(), ~replace(.x, str_detect(.x, "^$|don't know|prefer not to|not alive at the time"), NA)) 
+         across(everything(), ~replace(.x, str_detect(.x, "^$|don’t know|prefer not to|not alive at the time"), NA)),
+         
+         # yob - numeric
+         q4 = as.numeric(q4)
          )
 
 # '----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -220,6 +223,7 @@ estonia = estonia %>%
     
   )
 
+
 ### add cleaned variable names to the df with question text  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 qs_text = cbind(names(estonia), qs_text) %>% rename(q_var = 1)
 
@@ -241,10 +245,10 @@ estonia = estonia %>% mutate(age = 2025-as.numeric(yob))
 # 3. Recode Likert to numeric ------------------------------------------------------------------------------------------------------------------------
 
 likert_agree <- c(
-  "strongly disagree" = 1,
-  "somewhat disagree" = 2,
-  "somewhat agree" = 3,
-  "strongly agree" = 4)
+  "strongly agree" = 1,
+  "somewhat agree" = 2,
+  "somewhat disagree" = 3,
+  "strongly disagree" = 4)
 
 likert_import<- c(
   "very important" = 1,
@@ -267,11 +271,11 @@ likert_likely <- c(
   "very unlikely" = 4)
 
 likert_satisf5 <- c(
-  "very satisfied" = 1,
-  "somewhat satisfied" = 2,
+  "very satisfactory" = 1,
+  "rather satisfactory" = 2,
   "neither satisfactory nor unsatisfactory" = 3,
-  "somewhat dissatisfied" = 4,
-  "very satisfied" = 5)
+  "rather unsatisfactory" = 4,
+  "very unsatisfactory" = 5)
 
 likert_support <- c(
   "fully support" = 1,
@@ -322,7 +326,8 @@ make_dummies_keep_multi <- function(data, id_col, multi_col) {
   
   temp = data %>%
     select(!!id_col, !!multi_col) %>%
-    mutate(!!multi_col_multi := !!multi_col) %>%  # keep original as new col
+    mutate(!!multi_col := gsub(', but', ' but', as.character(.data[[multi_col_name]])), # remove any commas that don't separate individual responses
+           !!multi_col_multi := !!multi_col) %>%  # keep original as new col
     separate_rows(!!multi_col, sep = ",") %>%
     dummy_cols(select_columns = multi_col_name,
                remove_selected_columns = TRUE) %>%
@@ -590,28 +595,28 @@ write_flex(estonia, file.path('data', 'clean', 'baltic_way_survey.csv'), format 
 
 ### (*)checks -------------------------------------------------------------------------------------------------------------------------------------------------
 ### -> basic correlations with Finnish TV 
-sf(estonia$bw2_finnish_tv)
-pr_na(estonia$bw2_finnish_tv)
-
-prop.table(table( estonia$bw1_soviet,  is.na(estonia$bw2_finnish_tv), useNA='ifany'), 2)
-prop.table(table( is.na(estonia$bw2_ref91),  is.na(estonia$bw2_finnish_tv), useNA='ifany'), 2)
-(table( is.na(estonia$bw2_ref91),  is.na(estonia$bw2_finnish_tv), useNA='ifany'))
-
-
-table(grepl("nobody|prefer|don't know|^$", estonia$bw2_ref91), 
-      grepl("nobody|prefer|don't know|^$", estonia$bw2_finnish_tv), useNA = 'ifany')
-
-
-### duration
-summary(estonia$duration_in_seconds/60)
-sf(estonia$duration_in_seconds > 60 & estonia$duration_in_seconds < 15*60)
-hist(estonia$duration_in_seconds/60)
-
-
-
-### lat-lon
-plot(estonia$location_latitude[estonia$location_latitude >55 & estonia$location_latitude < 65],
-     estonia$location_longitude[estonia$location_latitude >55 & estonia$location_latitude < 65])
+# sf(estonia$bw2_finnish_tv)
+# pr_na(estonia$bw2_finnish_tv)
+# 
+# prop.table(table( estonia$bw1_soviet,  is.na(estonia$bw2_finnish_tv), useNA='ifany'), 2)
+# prop.table(table( is.na(estonia$bw2_ref91),  is.na(estonia$bw2_finnish_tv), useNA='ifany'), 2)
+# (table( is.na(estonia$bw2_ref91),  is.na(estonia$bw2_finnish_tv), useNA='ifany'))
+# 
+# 
+# table(grepl("nobody|prefer|don't know|^$", estonia$bw2_ref91), 
+#       grepl("nobody|prefer|don't know|^$", estonia$bw2_finnish_tv), useNA = 'ifany')
+# 
+# 
+# ### duration
+# summary(estonia$duration_in_seconds/60)
+# sf(estonia$duration_in_seconds > 60 & estonia$duration_in_seconds < 15*60)
+# hist(estonia$duration_in_seconds/60)
+# 
+# 
+# 
+# ### lat-lon
+# plot(estonia$location_latitude[estonia$location_latitude >55 & estonia$location_latitude < 65],
+#      estonia$location_longitude[estonia$location_latitude >55 & estonia$location_latitude < 65])
 
 
 # ' --------------------------------------------------------------------------------------------------------------------------------------------
