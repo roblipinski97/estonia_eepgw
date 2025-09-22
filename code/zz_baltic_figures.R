@@ -33,10 +33,7 @@ file.copy(rstudioapi::getSourceEditorContext()$path,
 estonia = fread(file.path('data', 'clean', 'baltic_way_survey.csv')) 
 
 #### LG .shp  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-estonia_lg_sf = read_sf(file.path(main_dir, 'data', 'spatial', 'estonia_lg_2023.shp')) %>% clean_names() %>% 
-  rename(county = mnimi, lg = onimi) %>% 
-  select(c(county,lg)) %>% 
-  mutate(across(c(county, lg), ~tolower(.)))
+estonia_lg_sf = read_sf(file.path(main_dir, 'data', 'spatial', 'estonia_lg_2023_dist.shp')) %>% clean_names()
 
 
 ##### + population -----------------------------------------------------------------------------------------------------------------------------------------------
@@ -47,22 +44,150 @@ population <- fread(file.path(main_dir, 'data', 'raw', 'population_2016_2023.csv
 
 estonia_lg_sf = left_join(estonia_lg_sf, population) %>% st_as_sf()
 
+#### pathway BW ------------------------------------------------------------------------------------------------------------------------------------------------------
+baltic_way = read_sf(file.path('data', 'spatial', 'baltic_way_estonia_clean.geojson'))
 
+
+
+### map | Baltic Way participation ----------------------------------------------------------------------------------------------------------------------------------------
+
+
+### > summarise --------------------------------------------------------------------------------------------------------------------------------------------
+dta_plot = estonia %>% select(c(matches('yob|bw5|bw3'))) %>% 
+  filter(yob <= 1989) %>% 
+  mutate(lg_plot = bw5_lg_you) %>% 
+  select(c(lg_plot, matches('bw3_me_dummy'))) %>% 
+  group_by(lg_plot) %>% 
+  summarise_all(., mean_miss) %>% # summarise
+  mutate(across(everything(), ~replace(.x, is.nan(.x), NA))) # NaN -> NA
+
+# find nobs used for plotting
+n1 = estonia %>% 
+  filter(yob <= 1989) %>% 
+  filter(!is.na(bw3_me)) %>% 
+  filter(!is.na(bw5_lg_you)) %>% 
+  nrow()
+
+# average participation?
+estonia %>% filter(yob <= 1989) %>% mutate(temp = grepl('took part', bw3_me)) %>% pull(temp) %>% pr
+
+### to long format
+dta_plot = dta_plot %>% gather(var, value, -lg_plot)
+
+# add geo-coordinates
+dta_plot = dta_plot %>% left_join(., estonia_lg_sf %>% rename(lg_plot = lg)) %>% st_as_sf() 
+
+### create labels (for full matrix)
+labels_you =  c(
+  bw3_me_dummy_part   = "Participated or witnessed",
+  bw3_me_dummy_watch   = "Watched/listened in the media",
+  bw3_me_dummy_none   = "Not involved"
+  )
+
+### order labels
+dta_plot$var =  factor(dta_plot$var, levels = c('bw3_me_dummy_part',  'bw3_me_dummy_watch', 'bw3_me_dummy_none'))
+
+
+
+### > plot ---------------------------------------------------------------------------------------------------------------------------------------------------
+g1= ggplot()+
+  
+  geom_sf(data = estonia_lg_sf, fill = 'grey30')+
+  geom_sf(data = dta_plot, aes(fill = value),
+          color = 'black') +
+  geom_sf(data = baltic_way, color = 'red', linewidth = 1.1) +
+  
+  facet_wrap(~var, labeller = labeller(var = labels_you))+ 
+  
+  scale_fill_gradient2(name = 'Share of respondents', # 'share',
+                       low = "darkblue", high = "#EC5F06",
+                       mid = "#F2E5E1", 
+                       # midpoint = mean_miss(dta_plot$value[dta_plot$var == 'nobody']),
+                       midpoint = .25,
+                       labels = percent_format(),
+                       breaks = round(seq(0, 1, length.out = 11), 2)
+  ) +
+  guides(fill = guide_colorbar(title.position = 'top')) +
+  labs(
+    # title = str_wrap_br('Thinking about the Baltic Way demonstration on 23rd August 1989,
+    #                     please indicate which of the following options best describes the form of participation of...<br>', 90),
+    # subtitle = str_wrap_br(paste0('<b>You personally</b>', '<br>'), 80),
+    caption = paste0("<br><b>Note:</b> Based on an online EEPGW survey conducted on a sample of 1,222 adult Estonians in September 2025. 
+    Only respondents born before 1990 are included in the sample used for those calculations (n =",
+    prettyNum(n1, big.mark = ',') ,  
+    
+    "). Values calculated per self-declared municipality <b>residence in 1989</b>. 
+    Pathway of the <b><span style='color:red;'>Baltic Way</span></b> is marked in red.")
+  ) +
+  
+  map_theme +
+  theme(
+    plot.title = element_markdown(size = 19),
+    plot.subtitle = element_markdown(size = 20),
+    plot.caption = element_textbox_simple(size = 12),
+    
+    legend.title = element_markdown(size = 15, angle = 00),
+    legend.text = element_text(face = 'plain', size = 14),
+    legend.key.width = unit(2.9, 'cm'),
+    legend.key.height = unit(.5, 'cm'),
+    
+    strip.text = element_markdown(size = 15, color = 'black')
+  )
+
+
+ggsave(g1, width = 30, height = 14, unit = 'cm',
+       file = file.path('figures', 'BW participation (you).png'))
+
+
+
+
+### scatterplot | BW distance vs participation ----------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+g2 = ggplot(dta_plot %>% st_drop_geometry(),
+       aes(x = dist_bw_lg, y = value))+
+  geom_hline(yintercept = 0)+
+  geom_point(fill = 'grey', size = 4)+
+  geom_smooth(method = 'lm', se = F, color = 'black', linetype = 'dashed') +
+  
+  facet_wrap(~var, labeller = labeller(var = labels_you)) +
+  
+  scale_y_continuous(expand = expansion(mult = c(0.00, 0.1)),
+                     labels = percent_format()) +
+  
+  
+  labs(
+    # title = str_wrap_br('Thinking about the Baltic Way demonstration on 23rd August 1989,
+    #                     please indicate which of the following options best describes the form of participation of...<br>', 90),
+    # subtitle = str_wrap_br(paste0('<b>You personally</b>', '<br>'), 80),
+    x = '<br>Distance from the self-declared municipality <b>residence in 1989</b> to the Baltic Way pathway (km)<br>',
+    y = str_wrap_br('Share of respondents', 40),
+    caption = paste0("<br><b>Note:</b> Based on an online EEPGW survey conducted on a sample of 1,222 adult Estonians in September 2025. 
+    Only respondents born before 1990 are included in the sample used for those calculations (n =",
+      prettyNum(n1, big.mark = ',') , 
+      "). Black dashed line shows the linear line of best fit.")
+  ) +
+  theme(
+    axis.line.x = element_blank(),
+    plot.caption = element_textbox_simple(size = 12)
+  )
+
+ggsave(g2, width = 40, height = 15, unit = 'cm',
+       file = file.path('figures', 'BW participation (you) vs distance (LG).png'))
+
+
+
+
+
+# ' ----------------------------------------------------------------------------------------------------------------------------------------
 ### map | BW2 pol. activity by 89' you/parents ----------------------------------------------------------------------------------------------------------------------------------------
-
-estonia$bw5_locality_any
-
-estonia$repress_deport_grandparents %>% pr_na
-
-fdistinct(estonia$bw5_locality_any)
-fdistinct(estonia$bw5_lon_any)
-
-
 
 ### *checks
 pr_na(estonia$bw2_finnish_tv_you) # % watching Finnish TV
-pr_na(estonia$bw2_finnish_tv_you[estonia$yob < 1985]) # % watching Finnish TV among born <1985 (33%)
-prop.table(table(estonia$bw2_finnish_tv_you,estonia$yob < 1985, useNA = 'ifany'), 2) # % watching Finnish TV <1985 vs >1985 -> no one born >1985 admits watching
+pr_na(estonia$bw2_finnish_tv_you[estonia$yob < 1981]) # % watching Finnish TV among born <1985 (33%)
+prop.table(table(estonia$bw2_finnish_tv_you,estonia$yob < 1981, useNA = 'ifany'), 2) # % watching Finnish TV <1985 vs >1985 -> no one born >1985 admits watching
 
 ### select variables to run the mapping loop for
 bw2_vars = names(estonia)[grepl('^bw2', names(estonia)) & grepl('_multi', names(estonia))]
@@ -82,7 +207,7 @@ for(var1 in bw2_vars){
   if(grepl('finnish_tv', var1)){title1 = 'Watched Finnish TV regularly (at least weekly)'}
   if(grepl('russian_tv', var1)){title1 = 'Watched Russian TV regularly (at least weekly)'}
   if(grepl('protest_pre', var1)){title1 = 'Took part in any public demonstration before the Baltic Way demonstration of 23rd August 1989'}
-  if(grepl('protest_bw', var1)){title1 = 'Took part in the Baltic Way demonstration of 23rd August 1989'}
+  if(grepl('bw2_protest_post', var1)){title1 = 'Took part in any public demonstration after the Baltic Way demonstration of 23rd August 1989'}
   if(grepl('ref91_', var1)){title1 = 'Voting ‘Yes’ in the Independence Referendum of 1991'}
   
  
@@ -94,7 +219,7 @@ for(var1 in bw2_vars){
     # rename(lg_plot = lg) %>% # (2025 OR 1989 residence?)
     rename(lg_plot = bw5_lg_any) %>% # (2025 OR 1989 residence?)
     
-    # filter(yob < 1985) %>% # leave only people born <1985
+    filter(yob < 1981) %>% # leave only people born <1985
     # filter missing obs
     filter(!is.na(lg_plot)) %>% 
     group_by(lg_plot) %>% 
@@ -147,7 +272,7 @@ for(var1 in bw2_vars){
     
     scale_fill_gradient2(name = '', # 'share',
                          low = "darkblue", high = "#EC5F06",
-                         mid = "#fffff0", 
+                         mid = "#F2E5E1", 
                          midpoint = mean_miss(dta_plot$value[dta_plot$var == 'nobody']),
                          # midpoint = .25,
                          labels = percent_format(),
@@ -166,7 +291,6 @@ for(var1 in bw2_vars){
       
       legend.title = element_markdown(size = 20, angle = 90),
       legend.text = element_text(face = 'plain', size = 16),
-      legend.ticks = element_line(color = 'grey70', size = .9),
       legend.key.width = unit(3.8, 'cm'),
       legend.key.height = unit(.6, 'cm'),
       
@@ -179,56 +303,9 @@ for(var1 in bw2_vars){
                           paste0("BW2 ", title1, ".png")))
   
   
-  if(grepl('protest_bw', var1)){assign('dta_bw_lg', dta_plot)}
-  
   
   
 }
-
-
-
-### xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-### xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-### xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-### xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-### xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-
-
-### plot | BW distance vs participation ----------------------------------------------------------------------------------------------------------------------------------------
-
-
-dta_plot = left_join(dta_bw_lg %>% rename(lg = lg_plot),
-                     estonia %>% select(c(lg, dist_bw_lg_current)) %>% distinct)
-
-labels_you =  c(
-  you   = "You",
-  immediate_family_parents_or_siblings   = "Parents or siblings",
-  grandparents   = "Grandparents",
-  another_family_member   = "Another family member",
-  nobody   = "Nobody"
-)
-
-
-g1 = ggplot(dta_plot, aes(x=dist_bw_lg_current, y=value))+
-  geom_point(size = 4, fill = 'grey')+
-  geom_smooth(method='lm', se=F, color='red', linetype='dashed')+
-  facet_wrap(~var, labeller = labeller(var = labels_you))+
-
-  scale_y_continuous(expand = expansion(mult = c(0.04, 0.1)),
-                     labels = percent_format()) +
-  labs(
-    title = 'Baltic Way participation',
-    x = 'Distance from the municipality of residence (in 1989) from the Baltic Way pathway (km)',
-    y = str_wrap_br('Share of respondents declaring participation for a given referent', 40)
-  )
-  
-g1
-
-ggsave(g1, width = 35, height = 21, unit = 'cm',
-       # file = file.path('figures', 'aggregate', 'Finnish TV watchers by referent.png'))
-       file = file.path('figures', 'BW participation vs distance (LG).png'))
-
 
 
 
@@ -326,7 +403,7 @@ for(var1 in repress_vars){
     
     scale_fill_gradient2(name = '', # 'share',
                          low = "darkblue", high = "#EC5F06",
-                         mid = "#fffff0", 
+                         mid = "#F2E5E1", 
                          midpoint = mean_miss(dta_plot$value[dta_plot$var == 'nobody']),
                          # midpoint = .25,
                          labels = percent_format(),
@@ -345,7 +422,6 @@ for(var1 in repress_vars){
       
       legend.title = element_markdown(size = 20, angle = 90),
       legend.text = element_text(face = 'plain', size = 16),
-      legend.ticks = element_line(color = 'grey70', size = .9),
       legend.key.width = unit(3.8, 'cm'),
       legend.key.height = unit(.6, 'cm'),
       
@@ -443,7 +519,6 @@ g1= ggplot()+
     
     legend.title = element_markdown(size = 20, angle = 90),
     legend.text = element_text(face = 'plain', size = 16),
-    legend.ticks = element_line(color = 'grey70', size = .9),
     legend.key.width = unit(3.8, 'cm'),
     legend.key.height = unit(.6, 'cm'),
     
@@ -490,7 +565,6 @@ g1 = ggplot(dta_plot, # %>% filter(!lg %in% c('tallinn', 'tartu linn')),
     legend.direction = 'vertical',
     legend.title = element_markdown(size = 20, angle = 90),
     legend.text = element_text(face = 'plain', size = 20),
-    legend.ticks = element_line(color = 'grey70', size = .9),
     legend.key.width = unit(.8, 'cm'),
     legend.key.height = unit(3.6, 'cm')
   )
@@ -536,7 +610,6 @@ g1 = ggplot(dta_plot,
     legend.direction = 'vertical',
     legend.title = element_markdown(size = 20, angle = 90),
     legend.text = element_text(face = 'plain', size = 20),
-    legend.ticks = element_line(color = 'grey70', size = .9),
     legend.key.width = unit(.8, 'cm'),
     legend.key.height = unit(3.6, 'cm')
   )
@@ -544,6 +617,87 @@ g1 = ggplot(dta_plot,
 
 ggsave(g1, width = 35, height = 28, unit = 'cm',
        file = file.path('figures', 'aggregate', 'respondents residence 1989.png'))
+
+
+
+### xxx | protests pre-BW-post -----------------------------------------------------------------------------------------------------------------
+
+### create dummy for ANY protest at ANY point post-1991
+estonia <- estonia %>%
+  mutate(
+    pol_past_protest_any_post1991 = if_else(
+      rowSums(select(., 
+                     pol_past_protest_elections_1991_post_independence,
+                     pol_past_protest_elections_2022_last_3_5_years,
+                     pol_past_protest_other_1991_post_independence,
+                     pol_past_protest_other_2022_last_3_5_years
+      ) == 1, na.rm = TRUE) > 0,
+      1, 0
+    )
+  )
+
+estonia$pol_past_protest_any_post1991 %>% sf
+
+
+### add dummy if LG actually crossed by BW pathway
+baltic_way = read_sf(file.path('data', 'spatial', 'baltic_way_estonia_clean.geojson'))
+
+
+### calculate plot data
+
+
+dta_plot = estonia %>% 
+  filter(yob < 1981) %>% 
+  filter(!bw5_lg_you %in% c('tallinn')) %>% 
+  mutate(bw_cross = ifelse(bw5_lg_you %in% baltic_way$lg, 'Crossed', 'Not crossed')) %>% 
+  select(c(bw_cross,
+           bw2_protest_pre_you, bw2_protest_post_you,
+           bw3_me_took_part_in_it_by_being_part_of_the_human_chain_formed,
+           pol_past_protest_any_post1991
+           )) %>% 
+  group_by(bw_cross) %>% summarise_all(.,mean_miss) %>% 
+  gather(var, value, -bw_cross) %>% 
+  mutate(var = case_when(
+    str_detect(var, 'pre_you') ~ 'Soviet era (pre-BW)',
+    str_detect(var, 'took_part') ~ 'Baltic Way (1989)',
+    str_detect(var, 'post_you') ~ 'Soviet era (post-BW)',
+    str_detect(var, 'post1991') ~ 'Post-1991'
+  ))
+
+dta_plot$var = factor(dta_plot$var, levels = c('Soviet era (pre-BW)', 'Baltic Way (1989)',
+                                               'Soviet era (post-BW)', 'Post-1991'))
+
+g1=ggplot(dta_plot, aes(x = var, y = value, fill = bw_cross, group = bw_cross))+
+  geom_bar(stat = 'identity', position = position_dodge(.9))+  
+  geom_text(aes(label=paste0(round(value*100, 0), '%')), , position = position_dodge(.9),
+            size = 7, vjust = -.5)+
+  labs(
+      # title = '<b>Municipality-level protest trends before and after the Baltic Way<b>',
+       x = '', y = 'Share of respondents\ndeclaring protest participation\n',
+       caption = '<br><b>Note:</b> Only respondents born before 1981 and those living outside Tallinn are
+       included in the sample used for those calculations.<br>'
+       ) +
+  scale_fill_manual(name = 'BW crossing the municipality: ',
+                    labels = c('Yes', 'No'),
+                    values = c('#0072ce','#CE5D00')) + 
+  scale_y_continuous(expand = expansion(mult=c(0,.1), add=c(0,0)),
+                     labels=percent_format())+
+  guides(fill = guide_legend(title.position = 'top')) +
+  bar_theme+
+  theme(
+    legend.title = element_markdown(size = 26, face='bold'),
+    legend.text = element_markdown(size = 26),
+    axis.text.x = element_text(size = 20),
+    legend.key.spacing.x = unit(.5,'cm')
+  )
+
+g1
+
+# save
+ggsave(plot = g1, file.path(main_dir, 'Figures', 'Protest dynamic pre-post BW.png'),
+       width = 37, height = 20, unit = 'cm')
+
+
 
 
 
@@ -685,7 +839,7 @@ ggsave(plot = g_all, file.path(main_dir, 'Figures', 'Demographics.png'),
        width = 67, height = 40, unit = 'cm')
 
 
-### XXX plot | outcomes by key demo --------------------------------------------------------------------------------------------------------
+### xxx plot | outcomes by key demo --------------------------------------------------------------------------------------------------------
 
 for(var1 in c('county', 'gender', 'age', 'edu', 'ethnic', 'satisf_financial')){
 
@@ -803,6 +957,21 @@ for(var1 in c('county', 'gender', 'age', 'edu', 'ethnic', 'satisf_financial')){
 
 
 
+### plot | left-right by party -----------------------------------------------------------------------------------------------------------------
+
+
+g1=ggplot(estonia, aes(x=lr))+
+  geom_histogram()+
+  facet_wrap(~party2023, scales='free_y')
+
+
+# save
+ggsave(plot = g1, file.path(main_dir, 'Figures', 'Left-right by party (draft).png'),
+       width = 67, height = 40, unit = 'cm')
+
+
+
+
 ### plot | party thermometers -----------------------------------------------------------------------------------------------------------------
 dta_plot = estonia %>% 
   select(c(starts_with("party_th_"))) %>% 
@@ -861,31 +1030,83 @@ ggsave(g1, width = 35, height = 28, unit = 'cm',
 
 
 
-#
+
+# ' ----------------------------------------------------------------------------------------------------------------------------------------
+### map | EE pop density ---------------------------------------------------------------------------------------------------------------------
+pop_estonia = read_sf(file.path(main_dir, 'data', 'spatial', 'pop_grid_1km_baltic.gpkg')) %>% 
+  clean_names() %>% 
+  filter(str_detect(nuts2021_3, 'EE'))
+
+names(pop_estonia)
+
+mid1 = mean_miss(log(pop_estonia$tot_p_2006[pop_estonia$tot_p_2006>0]))
+
+pop_estonia <- st_transform(pop_estonia, 4326)
+# pop_estonia = st_intersection(pop_estonia, estonia_lg_sf) # takes too long, leave Peipus for now
+
+
+g1 = ggplot()+
+  geom_sf(data = pop_estonia, aes(fill = log(tot_p_2006+.01)),
+          color = NA)+
+  
+  scale_fill_viridis(name = 'Population 2006 (log)',
+                     option = 'magma',
+                     breaks = round(seq(from = min(log(pop_estonia$tot_p_2006+.01)),
+                                        to   = max(log(pop_estonia$tot_p_2006+.01)),
+                                        length.out=10), 1))+
+  guides(fill = guide_colorbar(title.position = 'top')) +
+  # scale_fill_gradient2(name = '', # 'share',
+  #                      low = "darkblue", high = "#EC5F06",
+  #                      mid = "#F2E5E1", 
+  #                      midpoint = 3,
+  #                      # midpoint = .25
+  # ) +
+  labs(
+    # title = str_wrap_br('Population density in Estonia (2006)', 60),
+    caption = '<br><b>Note:</b> Full geographic boundaries, including internal waters included. Logarithm of zero values
+    taken by adding 0.1 constant.<br>
+    <br><b>Source:</b> Eurostat (Population);.<br>'
+  )+
+  map_theme+
+  theme(
+    plot.caption = element_textbox_simple(size = 12),
+    
+    legend.title = element_text(size = 22),
+    legend.text = element_text(size = 18),
+    legend.key.width = unit(3.8, 'cm'),
+    legend.key.height = unit(.6, 'cm')
+  )
+
+
+ggsave(g1, width = 30, height = 20, unit = 'cm',
+       # file = file.path('figures', 'aggregate', 'Finnish TV watchers by referent.png'))
+       file = file.path('figures', 'Estonia pop density (2006).png'))
+
+
 
 # ' --------------------------------------------------------------------------------------------------------------------------------------------------
 #  SCRAPBOOK ------------------------------------------------------------------------------------------------------------------------------------
 
 
 ### map | BW part. by 89' LG ----------------------------------------------------------------------------------------------------------------------------------------
-estonia[, bw2_protest_bw_dummy := fcase(
-  str_detect(bw2_protest_bw, '^nobody'), 'no one in the family',
-  is.na(bw2_protest_bw), 'no response',
+estonia[, bw2_bw2_protest_post_dummy := fcase(
+  str_detect(bw2_bw2_protest_post, '^nobody'), 'no one in the family',
+  is.na(bw2_bw2_protest_post), 'no response',
   default = 'anyone in the family'
 )]
 
-pr_na(estonia$bw2_protest_bw_dummy) # nice confirmation that 1 in 4 (27% here) of Estonians took part in the BW (I appreciate it's wide net, as it's not only 'you;)
+pr_na(estonia$bw2_bw2_protest_post_dummy) # nice confirmation that 1 in 4 (27% here) of Estonians took part in the BW (I appreciate it's wide net, as it's not only 'you;)
 
 
-dta_plot = estonia %>% count(bw5_lg_any, bw5_locality_any, bw2_protest_bw_dummy) %>% 
+dta_plot = estonia %>% count(bw5_lg_any, bw5_locality_any, bw2_bw2_protest_post_dummy) %>% 
   rename(lg = bw5_lg_any) %>% left_join(., estonia_lg_sf) %>% st_as_sf() %>% 
   mutate(n_rel = 1000*n/population)
 
 
-g1 = ggplot(dta_plot  %>% filter(!bw2_protest_bw_dummy %in% c('no response')), 
+g1 = ggplot(dta_plot  %>% filter(!bw2_bw2_protest_post_dummy %in% c('no response')), 
             aes(fill = n_rel))+
   geom_sf(color = 'black')+
-  facet_wrap(~bw2_protest_bw_dummy) +
+  facet_wrap(~bw2_bw2_protest_post_dummy) +
   # guides(fill = 'none')+
   
   labs(
@@ -907,7 +1128,6 @@ g1 = ggplot(dta_plot  %>% filter(!bw2_protest_bw_dummy %in% c('no response')),
     legend.direction = 'vertical',
     legend.title = element_markdown(size = 20, angle = 90),
     legend.text = element_text(face = 'plain', size = 20),
-    legend.ticks = element_line(color = 'grey70', size = .9),
     legend.key.width = unit(.8, 'cm'),
     legend.key.height = unit(3.6, 'cm')
   )
@@ -958,7 +1178,6 @@ g1 = ggplot(dta_plot %>% filter(!bw2_finnish_tv_dummy %in% c('no response')),
     legend.direction = 'vertical',
     legend.title = element_markdown(size = 20, angle = 90),
     legend.text = element_text(face = 'plain', size = 20),
-    legend.ticks = element_line(color = 'grey70', size = .9),
     legend.key.width = unit(.8, 'cm'),
     legend.key.height = unit(3.6, 'cm')
   )

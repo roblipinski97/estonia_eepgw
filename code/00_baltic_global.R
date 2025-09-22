@@ -17,11 +17,18 @@ file.copy(rstudioapi::getSourceEditorContext()$path,
           overwrite = T, copy.date = T)
 
 
-### set path --------------------------------------------------------------------------------------------------------------------------------------------------------
+
+### set path   -----------------------------------------------------------------------------------------------
 # System <- Sys.getenv(x = NULL, unset = "")
 
-main_dir = dirname(dirname(rstudioapi::getSourceEditorContext()$path))
+if(Sys.info()[['user']] == 'robli'){
+  main_dir = dirname(dirname(rstudioapi::getActiveDocumentContext()$path))  # '~/RA (Christian Schuster)/IADB_Ecuador'
+}
+### NEW USERS CAN ADD THEIR IDENTIFIERS AND PATHS HERE
+
 setwd(main_dir)
+
+
 
 # '  --------------------------------------------------------------------------------------------------------------------------------------------------------
 # PACKAGES --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -40,13 +47,14 @@ pacman::p_load(tidyverse, haven, stringr,
                
                stargazer,  ggpubr, paletteer, grid,
                gridExtra, patchwork,cowplot,
-               tidylog, hunspell, future, ids,
-               knitr, showtext, sysfonts,
+               tidylog,
                ggtext, psych, tm, ggridges, 
                tableone, zoo, rlang, stringfish, microbenchmark,
-               gender, genero, tm, stringdist, fuzzyjoin, beepr,
+               stringdist, fuzzyjoin, beepr,
                collapse, pryr, fst, tools, sf,
-               ivreg, estimatr, parsnip, lmtest,
+               ivreg, estimatr, parsnip, lmtest, AER,
+               multiwayvcov,
+               osrm, osmdata, dodgr, gmapdistance, viridis,
                update = F)
 
 

@@ -1,0 +1,7 @@
+var,beta.x,beta.y,beta,cell1
+"\footnotesize{\textbf{Distance (minutes)}}","$-$0.002$^{***}$","$-$0.002$^{***}$","$-$0.002$^{***}$","\footnotesize{\textbf{Distance (minutes)}}&\text{-}0.002$^{***}$&\text{-}0.002$^{***}$&\text{-}0.002$^{***}$\"
+"\footnotesize{\textbf{Soc-dem. controls}}","No","Yes","Yes","\footnotesize{\textbf{Soc-dem. controls}}&No&Yes&Yes\"
+"\footnotesize{\textbf{County FE}}","No","No","Yes","\footnotesize{\textbf{County FE}}&No&No&Yes\"
+"\footnotesize{\textbf{No. obs}}","731","719","715","\footnotesize{\textbf{No. obs}}&731&719&715\"
+"\footnotesize{\textbf{$R^{2}$}}","0.092","0.156","0.198","\footnotesize{\textbf{$R^{2}$}}&0.092&0.156&0.198\"
+"\footnotesize{\textbf{$\hat{X}_{\text{BWPart}}$}}","0.39","0.39","0.39","\footnotesize{\textbf{$\hat{X}_{\text{BWPart}}$}}&0.39&0.39&0.39\"
